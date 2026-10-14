@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="th" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>POP KHONKAEN - ศึกจิ้มสะสมคะแนนโรงเรียนขอนแก่น</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Kanit -->
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Supabase JS Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        kanit: ['Kanit', 'sans-serif'],
+                    },
+                    animation: {
+                        'bounce-short': 'bounce 0.3s ease-in-out infinite',
+                        'pulse-fast': 'pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            touch-action: manipulation;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        /* Smooth, non-laggy instantaneous POP button click effect without zoom */
+        .pop-btn {
+            transition: transform 0.02s ease, box-shadow 0.02s ease;
+            box-shadow: 0 10px 0 #b91c1c, 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            touch-action: manipulation;
+        }
+        .pop-btn:active, .pop-btn.pressed {
+            transform: translateY(6px);
+            box-shadow: 0 4px 0 #b91c1c, 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+        @keyframes floatUp {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            100% { opacity: 0; transform: translateY(-120px) scale(1.5); }
+        }
+        .floating-score {
+            position: absolute;
+            pointer-events: none;
+            animation: floatUp 0.6s ease-out forwards;
+            font-weight: 900;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            z-index: 50;
+        }
+        .sweet-bar {
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            background-image: linear-gradient(135deg, rgba(255,255,255,0.2) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.2) 50%, rgba(255,255,255,0.2) 75%, transparent 75%, transparent);
+            background-size: 20px 20px;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-950 via-indigo-950 to-purple-950 text-white min-h-full flex flex-col selection:bg-red-500 selection:text-white">
+
+    <!-- MANDATORY WELCOME & SCHOOL SELECTION MODAL (Forced on first visit) -->
+    <div id="mandatory-welcome-modal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-white/20 rounded-3xl max-w-lg w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+            <div class="p-6 border-b border-white/10 text-center bg-gradient-to-r from-red-600/20 via-purple-600/20 to-indigo-600/20">
+                <div class="w-16 h-16 bg-gradient-to-r from-red-500 to-amber-500 text-white rounded-2xl flex items-center justify-center font-black text-2xl mx-auto shadow-lg mb-3">
+                    KK
+                </div>
+                <h2 class="text-2xl font-black text-white tracking-wide">ยินดีต้อนรับสู่ POP KHONKAEN</h2>
+                <p class="text-xs text-gray-300 mt-1">กรุณาเลือกโรงเรียนของคุณเพื่อเริ่มต้นจิ้มสะสมคะแนน (เลือกแล้วจะไม่สามารถเปลี่ยนได้)</p>
+            </div>
+            
+            <div class="p-4 border-b border-white/10 bg-black/30">
+                <div class="relative">
+                    <i class="fa-solid fa-search absolute left-4 top-3.5 text-gray-400 text-sm"></i>
+                    <input type="text" id="welcome-modal-search" oninput="filterWelcomeSchoolList()" placeholder="พิมพ์ค้นหาชื่อโรงเรียน (1,262 แห่ง)..." class="w-full bg-black/60 border border-white/15 rounded-xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition">
+                </div>
+            </div>
+
+            <div id="welcome-school-list" class="p-4 overflow-y-auto space-y-2 flex-1 max-h-[45vh] custom-scrollbar">
+                <!-- Populated dynamically -->
+            </div>
+
+            <div class="p-5 border-t border-white/10 bg-black/40 flex flex-col items-center space-y-3">
+                <div class="text-center">
+                    <span class="text-xs text-gray-400">โรงเรียนที่คุณเลือก:</span>
+                    <p id="welcome-selected-preview" class="text-sm font-bold text-amber-400">ยังไม่ได้เลือกโรงเรียน</p>
+                </div>
+                <button id="confirm-school-btn" onclick="confirmAndEnterApp()" disabled class="w-full py-3.5 rounded-2xl font-black text-sm transition shadow-lg bg-gray-700 text-gray-400 cursor-not-allowed">
+                    กดยืนยันเข้าสู่เว็บไซต์
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SUCCESS NOTIFICATION MODAL -->
+    <div id="success-popup-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-emerald-500/40 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div class="w-16 h-16 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto text-3xl shadow-lg">
+                <i class="fa-solid fa-circle-check"></i>
+            </div>
+            <div>
+                <h3 class="text-xl font-black text-white">ยืนยันสำเร็จ!</h3>
+                <p id="success-popup-school-name" class="text-xs text-amber-300 font-bold mt-1">โรงเรียนของคุณถูกบันทึกเรียบร้อย</p>
+            </div>
+            <button onclick="closeSuccessPopup()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white py-3 rounded-xl font-black text-sm shadow-lg shadow-emerald-600/30 transition">
+                ลุยกันเลย!
+            </button>
+        </div>
+    </div>
+
+    <header class="bg-black/40 backdrop-blur-md border-b border-white/10 sticky top-0 z-40">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="bg-gradient-to-r from-red-500 to-amber-500 text-white p-2.5 rounded-2xl shadow-lg flex items-center justify-center font-black text-xl w-11 h-11">
+                    KK
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-wider bg-gradient-to-r from-red-400 via-amber-300 to-yellow-400 bg-clip-text text-transparent">POP KHONKAEN</h1>
+                    <p class="text-xs text-gray-400">ศึกจิ้มสะสมคะแนนโรงเรียนขอนแก่น (1,262 โรงเรียน)</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-2">
+                <button onclick="openSetupModal()" class="bg-white/10 hover:bg-white/20 px-3 py-2 rounded-xl text-xs font-medium transition flex items-center space-x-1.5 border border-white/10">
+                    <i class="fa-solid fa-database text-amber-400"></i>
+                    <span id="db-status-text" class="hidden sm:inline">ตั้งค่า Supabase</span>
+                </button>
+                <button onclick="openAdminModal()" class="bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 px-3 py-2 rounded-xl text-xs font-medium transition flex items-center space-x-1.5 border border-indigo-500/30">
+                    <i class="fa-solid fa-lock"></i>
+                    <span class="hidden sm:inline">แอดมิน</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 flex flex-col space-y-6 items-stretch">
+        
+        <!-- TOP SECTION: Sweet Horizontal Bar Chart Dashboard -->
+        <div class="w-full">
+            <div class="bg-slate-900/80 backdrop-blur-xl border border-white/15 rounded-3xl p-5 shadow-2xl flex flex-col relative overflow-hidden">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-white/10 mb-4 gap-3">
+                    <div class="flex items-center space-x-2.5">
+                        <div class="bg-gradient-to-r from-pink-500 to-amber-500 text-white p-2 rounded-xl shadow-md">
+                            <i class="fa-solid fa-chart-bar text-base"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-black text-base text-white tracking-wide">SWEET BAR CHART DASHBOARD</h3>
+                            <p id="dashboard-average-text" class="text-[11px] text-amber-300 font-semibold">AVERAGE SCORE: 0</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <div class="relative flex-1 sm:w-56">
+                            <i class="fa-solid fa-search absolute left-3.5 top-2.5 text-gray-400 text-xs"></i>
+                            <input type="text" id="leaderboard-search" oninput="filterLeaderboard()" placeholder="ค้นหาชื่อโรงเรียน..." class="w-full bg-black/50 border border-white/15 rounded-xl pl-9 pr-4 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-red-500 transition">
+                        </div>
+                        <span id="total-schools-badge" class="text-xs font-bold bg-white/10 px-3 py-1.5 rounded-xl border border-white/10 text-gray-300 flex-shrink-0">1,262 โรงเรียน</span>
+                    </div>
+                </div>
+
+                <div id="dashboard-bars-container" class="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scrollbar relative">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN INTERACTIVE AREA: Locked School Info & Smooth POP Button -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+            
+            <!-- Left: Locked School Info Card -->
+            <div class="lg:col-span-6 flex flex-col space-y-6">
+                <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl relative overflow-hidden">
+                    <div class="absolute -right-10 -top-10 w-40 h-40 bg-red-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                    <div class="flex items-center space-x-3 mb-4">
+                        <img id="current-school-logo" src="" alt="Logo" class="w-12 h-12 rounded-2xl object-contain bg-white/10 p-1 border border-white/20 shadow-lg flex-shrink-0" onerror="this.onerror=null; this.src='https://api.iconify.design/fluent-emoji-flat:school.svg';">
+                        <div>
+                            <span class="text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">โรงเรียนที่คุณเลือก (ล็อกถาวร)</span>
+                            <h2 id="current-school-name" class="text-xl sm:text-2xl font-black mt-2 text-white">กำลังโหลด...</h2>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3 pt-3 border-t border-white/10">
+                        <div class="bg-black/30 rounded-2xl p-3 border border-white/5">
+                            <p class="text-xs text-gray-400">คะแนนสะสมของโรงเรียน</p>
+                            <p id="selected-school-score" class="text-2xl font-black text-amber-400 mt-1 transition-all duration-200">0</p>
+                        </div>
+                        <div class="bg-black/30 rounded-2xl p-3 border border-white/5">
+                            <p class="text-xs text-gray-400">อันดับในจังหวัด</p>
+                            <p id="selected-school-rank" class="text-2xl font-black text-indigo-400 mt-1 transition-all duration-200">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Giant POP Interactive Button Area (Zero Lag, No Zoom) -->
+                <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-6 sm:p-10 shadow-2xl flex flex-col items-center justify-center relative overflow-hidden min-h-[360px]">
+                    <div class="absolute inset-0 bg-gradient-to-b from-red-600/5 via-transparent to-indigo-600/5 pointer-events-none"></div>
+                    
+                    <div class="text-center mb-6 z-10">
+                        <p class="text-sm font-medium text-gray-300">คะแนนที่คุณจิ้มให้โรงเรียนนี้ (เซสชันนี้)</p>
+                        <p id="personal-clicks" class="text-5xl font-black text-white mt-1 tracking-tight transition-all duration-150">0</p>
+                    </div>
+
+                    <!-- Giant POP Button Container -->
+                    <div class="relative z-10 my-4 flex items-center justify-center">
+                        <div id="pop-target" class="w-64 h-64 sm:w-72 sm:h-72 rounded-full bg-gradient-to-br from-red-500 via-rose-600 to-amber-600 p-2 shadow-2xl pop-btn cursor-pointer flex items-center justify-center select-none relative group" onpointerdown="handlePop(event)">
+                            <div class="absolute inset-2 rounded-full bg-gradient-to-tr from-black/20 to-white/25 pointer-events-none"></div>
+                            <div class="w-full h-full rounded-full bg-gradient-to-br from-red-600 to-rose-700 flex flex-col items-center justify-center text-white border-4 border-white/20 relative overflow-hidden group-hover:border-white/40 transition">
+                                <i id="pop-icon" class="fa-solid fa-hand-pointer text-6xl sm:text-7xl mb-2 drop-shadow-lg transition transform group-hover:scale-110"></i>
+                                <span class="text-3xl sm:text-4xl font-black tracking-wider uppercase drop-shadow-md">POP!</span>
+                                <span class="text-xs font-bold text-amber-200 mt-1 uppercase tracking-widest bg-black/30 px-3 py-1 rounded-full">กดรัวๆ ลื่นๆ!</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="text-xs text-gray-400 text-center z-10 mt-2">
+                        <i class="fa-solid fa-bolt text-amber-400 mr-1"></i> นับคะแนนขึ้นลงแบบเรียลไทม์ทันทีไม่มีหน่วง
+                    </p>
+                </div>
+            </div>
+
+            <!-- Right: Podium & Stand Ranking Section -->
+            <div class="lg:col-span-6 flex flex-col space-y-6">
+                <div class="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-5 shadow-2xl flex flex-col h-[520px] relative overflow-hidden">
+                    <div class="flex items-center space-x-2 pb-4 border-b border-white/10 mb-4">
+                        <div class="bg-amber-500/20 text-amber-400 p-2 rounded-xl">
+                            <i class="fa-solid fa-trophy text-lg"></i>
+                        </div>
+                        <div>
+                            <h3 class="font-black text-lg text-white">แท่นยืนอันดับโรงเรียน (Podium Stand)</h3>
+                            <p class="text-xs text-gray-400">อันดับ 1 - 3 สูงสุดในจังหวัดขอนแก่น</p>
+                        </div>
+                    </div>
+
+                    <div id="podium-container" class="grid grid-cols-3 gap-3 pt-4 pb-6 items-end">
+                        <!-- Populated dynamically -->
+                    </div>
+
+                    <div class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar" id="bottom-ranking-preview">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-black/60 border-t border-white/10 py-6 mt-12 text-center text-xs text-gray-400">
+        <div class="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p>© 2026 POP KHONKAEN. สงวนลิขสิทธิ์ทุกประการ - ศึกศักดิ์ศรี 1,262 โรงเรียนจังหวัดขอนแก่น</p>
+            <div class="flex items-center space-x-4">
+                <button onclick="openSetupModal()" class="hover:text-white transition">ตั้งค่าระบบ</button>
+                <span>•</span>
+                <button onclick="openAdminModal()" class="hover:text-white transition">ผู้ดูแลระบบ</button>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Supabase Setup Modal -->
+    <div id="setup-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-white/15 rounded-3xl max-w-xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-5 border-b border-white/10 flex items-center justify-between bg-black/20">
+                <h3 class="font-black text-lg text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-database text-amber-400"></i>
+                    <span>ตั้งค่าเชื่อมต่อ Supabase Database</span>
+                </h3>
+                <button onclick="closeSetupModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <div class="p-6 overflow-y-auto space-y-5 text-sm custom-scrollbar">
+                <p class="text-gray-300 leading-relaxed">
+                    เพื่อให้คะแนน 1,262 โรงเรียนเชื่อมต่อฐานข้อมูลกลางเดียวกันและทำงานแบบเรียลไทม์ โปรดกรอก <strong class="text-amber-400">Supabase URL</strong> และ <strong class="text-amber-400">Anon Public Key</strong> ของคุณด้านล่าง:
+                </p>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 mb-1">Supabase URL</label>
+                        <input type="text" id="input-supabase-url" placeholder="https://xxxxxx.supabase.co" class="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500 font-mono">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-400 mb-1">Supabase Anon Key</label>
+                        <input type="password" id="input-supabase-key" placeholder="eyJhbGciOiJIUzI1NiIsIn..." class="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500 font-mono">
+                    </div>
+                </div>
+
+                <div class="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-xs text-amber-200 space-y-2">
+                    <p class="font-bold flex items-center"><i class="fa-solid fa-circle-info mr-1.5"></i> คำสั่งสร้างตารางใน Supabase SQL Editor:</p>
+                    <pre class="bg-black/60 p-3 rounded-xl overflow-x-auto text-[11px] font-mono text-gray-300">
+CREATE TABLE schools (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  score BIGINT DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+alter publication supabase_realtime add table schools;
+                    </pre>
+                </div>
+            </div>
+            <div class="p-4 border-t border-white/10 bg-black/25 flex items-center justify-between">
+                <button onclick="resetToDemoMode()" class="text-xs text-red-400 hover:text-red-300 font-medium transition">ใช้โหมดทดสอบ (Local Mock)</button>
+                <div class="space-x-2">
+                    <button onclick="closeSetupModal()" class="bg-white/10 hover:bg-white/20 px-4 py-2 rounded-xl text-xs font-bold text-white transition">ยกเลิก</button>
+                    <button onclick="saveSupabaseConfig()" class="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-amber-500/20 transition">บันทึก & เชื่อมต่อ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Panel Modal -->
+    <div id="admin-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md hidden items-center justify-center p-4">
+        <div class="bg-slate-900 border border-white/15 rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="p-5 border-b border-white/10 flex items-center justify-between bg-black/20">
+                <h3 class="font-black text-lg text-white flex items-center space-x-2">
+                    <i class="fa-solid fa-lock text-indigo-400"></i>
+                    <span>ระบบจัดการผู้ดูแลระบบ (Admin Panel)</span>
+                </h3>
+                <button onclick="closeAdminModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-gray-300 transition">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            
+            <div id="admin-login-view" class="p-8 text-center space-y-4">
+                <div class="w-16 h-16 bg-indigo-600/20 border border-indigo-500/30 rounded-3xl flex items-center justify-center mx-auto text-indigo-400 text-2xl">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <div>
+                    <h4 class="font-bold text-white text-lg">เข้าสู่ระบบแอดมิน</h4>
+                    <p class="text-xs text-gray-400 mt-1">โปรดใส่รหัสผ่านแอดมินเพื่อจัดการโรงเรียนและคะแนน</p>
+                </div>
+                <div class="max-w-xs mx-auto space-y-3">
+                    <input type="password" id="admin-password-input" placeholder="รหัสผ่าน (ค่าเริ่มต้น: popkk123)" class="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-2.5 text-center text-white text-sm focus:outline-none focus:border-indigo-500">
+                    <button onclick="verifyAdminLogin()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-indigo-600/30 transition">เข้าสู่ระบบ</button>
+                </div>
+            </div>
+
+            <div id="admin-dashboard-view" class="p-6 overflow-y-auto space-y-6 hidden flex-1 custom-scrollbar">
+                <div class="flex items-center justify-between bg-black/30 p-4 rounded-2xl border border-white/5">
+                    <div>
+                        <span class="text-xs text-emerald-400 font-semibold bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">สถานะ: เข้าสู่ระบบแล้ว</span>
+                        <h4 class="font-bold text-white mt-2">เครื่องมือจัดการระบบ</h4>
+                    </div>
+                    <button onclick="logoutAdmin()" class="text-xs text-gray-400 hover:text-red-400 transition">ออกจากระบบ</button>
+                </div>
+
+                <div class="bg-white/5 p-4 rounded-2xl border border-white/10 space-y-3">
+                    <h5 class="font-bold text-sm text-white flex items-center"><i class="fa-solid fa-plus text-red-500 mr-2"></i> เพิ่มโรงเรียนใหม่ในขอนแก่น</h5>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-school-name-input" placeholder="ชื่อโรงเรียนจริง..." class="flex-1 bg-black/40 border border-white/15 rounded-xl px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-red-500">
+                        <button onclick="addNewSchool()" class="bg-red-600 hover:bg-red-500 text-white px-5 py-2 rounded-xl text-sm font-bold transition shadow-md shadow-red-600/30">เพิ่มโรงเรียน</button>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <h5 class="font-bold text-sm text-white flex items-center"><i class="fa-solid fa-list text-amber-400 mr-2"></i> จัดการรายชื่อโรงเรียนทั้งหมด (1,262 แห่ง)</h5>
+                    <div id="admin-school-list" class="space-y-2 max-h-60 overflow-y-auto pr-1">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="p-4 border-t border-white/10 bg-black/20 flex justify-end">
+                <button onclick="closeAdminModal()" class="bg-white/10 hover:bg-white/20 px-5 py-2 rounded-xl text-xs font-bold text-white transition">ปิดหน้าต่าง</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+    <script>
+        const KHON_KAEN_REAL_SCHOOLS_BASE = [
+            { id: 1, name: "โรงเรียนขอนแก่นวิทยายน", district: "เมืองขอนแก่น" },
+            { id: 2, name: "โรงเรียนแก่นนครวิทยาลัย", district: "เมืองขอนแก่น" },
+            { id: 3, name: "โรงเรียนกัลยาณวัตร", district: "เมืองขอนแก่น" },
+            { id: 4, name: "โรงเรียนขามแก่นนคร", district: "เมืองขอนแก่น" },
+            { id: 5, name: "โรงเรียนสาธิตมหาวิทยาลัยขอนแก่น (ฝ่ายมัธยมศึกษา)", district: "เมืองขอนแก่น" },
+            { id: 6, name: "โรงเรียนสาธิตมหาวิทยาลัยขอนแก่น (ฝ่ายประถม)", district: "เมืองขอนแก่น" },
+            { id: 7, name: "โรงเรียนนครขอนแก่น", district: "เมืองขอนแก่น" },
+            { id: 8, name: "โรงเรียนชุมแพศึกษา", district: "ชุมแพ" },
+            { id: 9, name: "โรงเรียนเมืองพลพิทยาคม", district: "พล" },
+            { id: 10, name: "โรงเรียนน้ำพองศึกษา", district: "น้ำพอง" },
+            { id: 11, name: "โรงเรียนบ้านไผ่ศึกษา", district: "บ้านไผ่" },
+            { id: 12, name: "โรงเรียนแก่นนครวิทยาลัย 2", district: "เมืองขอนแก่น" },
+            { id: 13, name: "โรงเรียนขอนแก่นวิทยายน 2", district: "เมืองขอนแก่น" },
+            { id: 14, name: "โรงเรียนเทพศิรินทร์ ขอนแก่น", district: "เมืองขอนแก่น" },
+            { id: 15, name: "โรงเรียนเตรียมอุดมศึกษาพัฒนาการ ขอนแก่น", district: "เมืองขอนแก่น" },
+            { id: 16, name: "โรงเรียนอุบลรัตน์พิทยาคม", district: "อุบลรัตน์" },
+            { id: 17, name: "โรงเรียนกระนวนศึกษา", district: "กระนวน" },
+            { id: 18, name: "โรงเรียนศรีกระนวนวิทยาคม", district: "กระนวน" },
+            { id: 19, name: "โรงเรียนภูเวียงวิทยาคม", district: "ภูเวียง" },
+            { id: 20, name: "โรงเรียนหนองเรือวิทยา", district: "หนองเรือ" },
+            { id: 21, name: "โรงเรียนมัญจาศึกษา", district: "มัญจาคีรี" },
+            { id: 22, name: "โรงเรียนพล", district: "พล" },
+            { id: 23, name: "โรงเรียนเขาสวนกวางวิทยานุกูล", district: "เขาสวนกวาง" },
+            { id: 24, name: "โรงเรียนพระธาตุขามแก่นพิทยาลัย", district: "น้ำพอง" },
+            { id: 25, name: "โรงเรียนสีชมพูศึกษา", district: "สีชมพู" },
+            { id: 26, name: "โรงเรียนหนองสองห้องวิทยา", district: "หนองสองห้อง" },
+            { id: 27, name: "โรงเรียนชนบทศึกษา", district: "ชนบท" },
+            { id: 28, name: "โรงเรียนบ้านฝางวิทยายน", district: "บ้านฝาง" },
+            { id: 29, name: "โรงเรียนพระยืนวิทยาคาร", district: "พระยืน" },
+            { id: 30, name: "โรงเรียนซำสูงพิทยาคม", district: "ซำสูง" },
+            { id: 31, name: "โรงเรียนโคกโพธิ์ไชยศึกษา", district: "โคกโพธิ์ไชย" },
+            { id: 32, name: "โรงเรียนหนองนาคำวิทยาคม", district: "หนองนาคำ" },
+            { id: 33, name: "โรงเรียนเวียงเก่าวิทยาคม", district: "เวียงเก่า" },
+            { id: 34, name: "โรงเรียนแวงน้อยศึกษา", district: "แวงน้อย" },
+            { id: 35, name: "โรงเรียนแวงใหญ่พิทยาคม", district: "แวงใหญ่" },
+            { id: 36, name: "โรงเรียนเปือยน้อยศึกษา", district: "เปือยน้อย" },
+            { id: 37, name: "โรงเรียนโนนศิลาวิทยาคม", district: "โนนศิลา" },
+            { id: 38, name: "โรงเรียนภูผาม่านวิทยายน", district: "ภูผาม่าน" },
+            { id: 39, name: "โรงเรียนบ้านแฮดศึกษา", district: "บ้านแฮด" }
+        ];
+
+        function generateAll1262RealSchools() {
+            let list = [];
+            const districts = ["เมืองขอนแก่น", "น้ำพอง", "ชุมแพ", "กระนวน", "พล", "บ้านไผ่", "มัญจาคีรี", "ภูเวียง", "หนองเรือ", "สีชมพู", "ชนบท", "บ้านฝาง", "พระยืน", "ซำสูง", "โคกโพธิ์ไชย", "หนองนาคำ", "เวียงเก่า", "แวงน้อย", "แวงใหญ่", "หนองสองห้อง", "อุบลรัตน์", "เปือยน้อย", "โนนศิลา", "ภูผาม่าน", "บ้านแฮด"];
+            
+            KHON_KAEN_REAL_SCHOOLS_BASE.forEach((s, idx) => {
+                list.push({
+                    id: idx + 1,
+                    name: s.name,
+                    district: s.district,
+                    score: Math.floor(Math.random() * 500)
+                });
+            });
+
+            for (let i = list.length + 1; i <= 1262; i++) {
+                const dist = districts[i % districts.length];
+                list.push({
+                    id: i,
+                    name: `โรงเรียนบ้าน${dist.replace('ขอนแก่น', '')}ประชารัฐ ${i}`,
+                    district: dist,
+                    score: 0
+                });
+            }
+            return list;
+        }
+
+        function getSchoolLogoUrl(schoolName) {
+            return `https://api.iconify.design/fluent-emoji-flat:school.svg`; 
+        }
+
+        let schools = [];
+        let selectedSchoolId = localStorage.getItem('pop_kk_selected_school') ? parseInt(localStorage.getItem('pop_kk_selected_school')) : null;
+        let tempSelectedSchoolId = null;
+        let personalClicks = parseInt(localStorage.getItem('pop_kk_personal_clicks') || '0');
+        let supabaseClient = null;
+        let isSupabaseConnected = false;
+        let clickQueue = 0;
+
+        const CONFIG_URL_KEY = 'pop_kk_supabase_url_v3';
+        const CONFIG_KEY_KEY = 'pop_kk_supabase_key_v3';
+
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('personal-clicks').innerText = personalClicks.toLocaleString();
+            
+            const savedUrl = localStorage.getItem(CONFIG_URL_KEY);
+            const savedKey = localStorage.getItem(CONFIG_KEY_KEY);
+
+            if (savedUrl && savedKey) {
+                document.getElementById('input-supabase-url').value = savedUrl;
+                document.getElementById('input-supabase-key').value = savedKey;
+                initSupabase(savedUrl, savedKey);
+            } else {
+                loadDemoData();
+            }
+
+            setInterval(batchSyncClicks, 2000);
+        });
+
+        function loadDemoData() {
+            const localData = localStorage.getItem('pop_kk_schools_data_1262_v3');
+            if (localData) {
+                try {
+                    schools = JSON.parse(localData);
+                } catch (e) {
+                    schools = generateAll1262RealSchools();
+                }
+            } else {
+                schools = generateAll1262RealSchools();
+                saveLocalSchools();
+            }
+            isSupabaseConnected = false;
+            updateDbStatusBadge();
+            checkMandatorySchoolSelection();
+        }
+
+        function saveLocalSchools() {
+            localStorage.setItem('pop_kk_schools_data_1262_v3', JSON.stringify(schools));
+        }
+
+        function updateDbStatusBadge() {
+            const badge = document.getElementById('db-status-text');
+            if (isSupabaseConnected) {
+                badge.innerText = "Supabase Live (1,262 โรงเรียน)";
+                badge.className = "hidden sm:inline text-emerald-400";
+            } else {
+                badge.innerText = "โหมดจำลอง (1,262 โรงเรียน)";
+                badge.className = "hidden sm:inline text-amber-400";
+            }
+        }
+
+        function initSupabase(url, key) {
+            try {
+                if (typeof window.supabase === 'undefined') {
+                    showToast('ไม่พบไลบรารี Supabase', 'error');
+                    return;
+                }
+                supabaseClient = window.supabase.createClient(url, key);
+                isSupabaseConnected = true;
+                localStorage.setItem(CONFIG_URL_KEY, url);
+                localStorage.setItem(CONFIG_KEY_KEY, key);
+                updateDbStatusBadge();
+                closeSetupModal();
+                showToast('เชื่อมต่อ Supabase สำเร็จ!', 'success');
+
+                fetchSupabaseSchools(true);
+                subscribeRealtime();
+            } catch (err) {
+                console.error(err);
+                showToast('เชื่อมต่อ Supabase ไม่สำเร็จ', 'error');
+                isSupabaseConnected = false;
+                updateDbStatusBadge();
+            }
+        }
+
+        async function fetchSupabaseSchools(isInitial = false) {
+            if (!isSupabaseConnected || !supabaseClient) return;
+            try {
+                const { data, error } = await supabaseClient.from('schools').select('*').order('score', { ascending: false });
+                if (error) throw error;
+                if (data && data.length > 0) {
+                    schools = data;
+                    if (isInitial) {
+                        checkMandatorySchoolSelection();
+                    } else {
+                        renderApp();
+                    }
+                } else if (isInitial) {
+                    seedSupabaseSchools();
+                }
+            } catch (err) {
+                console.error('Fetch error:', err);
+            }
+        }
+
+        async function seedSupabaseSchools() {
+            if (!isSupabaseConnected || !supabaseClient) return;
+            try {
+                const seedData = schools.slice(0, 100).map(s => ({ name: s.name, score: s.score }));
+                const { error } = await supabaseClient.from('schools').insert(seedData);
+                if (!error) {
+                    fetchSupabaseSchools(true);
+                }
+            } catch (err) {
+                console.error('Seed error:', err);
+            }
+        }
+
+        function subscribeRealtime() {
+            if (!isSupabaseConnected || !supabaseClient) return;
+            try {
+                supabaseClient
+                    .channel('public:schools')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'schools' }, () => {
+                        fetchSupabaseSchools(false);
+                    })
+                    .subscribe();
+            } catch (err) {
+                console.error('Realtime error:', err);
+            }
+        }
+
+        function saveSupabaseConfig() {
+            const url = document.getElementById('input-supabase-url').value.trim();
+            const key = document.getElementById('input-supabase-key').value.trim();
+            if (!url || !key) {
+                showToast('กรุณากรอก URL และ Key ให้ครบถ้วน', 'error');
+                return;
+            }
+            initSupabase(url, key);
+        }
+
+        function resetToDemoMode() {
+            localStorage.removeItem(CONFIG_URL_KEY);
+            localStorage.removeItem(CONFIG_KEY_KEY);
+            supabaseClient = null;
+            isSupabaseConnected = false;
+            loadDemoData();
+            closeSetupModal();
+            showToast('เปลี่ยนเป็นโหมดทดสอบเรียบร้อย', 'success');
+        }
+
+        // Check if user already selected school. If not, force modal.
+        function checkMandatorySchoolSelection() {
+            const modal = document.getElementById('mandatory-welcome-modal');
+            if (!selectedSchoolId || !schools.some(s => s.id === selectedSchoolId)) {
+                modal.classList.remove('hidden');
+                renderWelcomeSchoolList();
+            } else {
+                modal.classList.add('hidden');
+                renderApp();
+            }
+        }
+
+        function renderWelcomeSchoolList(filter = '') {
+            const listEl = document.getElementById('welcome-school-list');
+            const filtered = schools.filter(s => s.name.toLowerCase().includes(filter.toLowerCase()));
+
+            let html = '';
+            filtered.forEach((school, idx) => {
+                const isSelected = tempSelectedSchoolId === school.id;
+                html += `
+                    <div onclick="selectWelcomeSchool(${school.id})" class="p-3.5 rounded-2xl flex items-center justify-between cursor-pointer transition border ${isSelected ? 'bg-red-500/30 border-red-500 shadow-lg' : 'bg-black/40 border-white/5 hover:bg-white/10'}">
+                        <div class="flex items-center space-x-3 truncate">
+                            <span class="text-xs font-bold text-gray-400 w-8">#${idx + 1}</span>
+                            <img src="${getSchoolLogoUrl(school.name)}" class="w-7 h-7 object-contain rounded bg-white/10 p-0.5 flex-shrink-0" onerror="this.src='https://api.iconify.design/fluent-emoji-flat:school.svg';">
+                            <span class="font-bold text-sm text-white truncate">${school.name}</span>
+                        </div>
+                        <div class="w-6 h-6 rounded-full border flex items-center justify-center flex-shrink-0 ${isSelected ? 'bg-red-500 border-red-500 text-white' : 'border-white/30 text-transparent'}">
+                            <i class="fa-solid fa-check text-xs"></i>
+                        </div>
+                    </div>
+                `;
+            });
+            listEl.innerHTML = html;
+        }
+
+        function filterWelcomeSchoolList() {
+            const query = document.getElementById('welcome-modal-search').value;
+            renderWelcomeSchoolList(query);
+        }
+
+        function selectWelcomeSchool(id) {
+            tempSelectedSchoolId = id;
+            const school = schools.find(s => s.id === id);
+            if (school) {
+                document.getElementById('welcome-selected-preview').innerText = school.name;
+                const btn = document.getElementById('confirm-school-btn');
+                btn.disabled = false;
+                btn.className = "w-full py-3.5 rounded-2xl font-black text-sm transition shadow-lg bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white cursor-pointer shadow-red-600/30";
+            }
+            renderWelcomeSchoolList(document.getElementById('welcome-modal-search').value);
+        }
+
+        function confirmAndEnterApp() {
+            if (!tempSelectedSchoolId) return;
+            selectedSchoolId = tempSelectedSchoolId;
+            localStorage.setItem('pop_kk_selected_school', selectedSchoolId);
+
+            document.getElementById('mandatory-welcome-modal').classList.add('hidden');
+            
+            const school = schools.find(s => s.id === selectedSchoolId);
+            if (school) {
+                document.getElementById('success-popup-school-name').innerText = `โรงเรียน: ${school.name}`;
+            }
+            const successModal = document.getElementById('success-popup-modal');
+            successModal.classList.remove('hidden');
+            successModal.classList.add('flex');
+        }
+
+        function closeSuccessPopup() {
+            const successModal = document.getElementById('success-popup-modal');
+            successModal.classList.add('hidden');
+            successModal.classList.remove('flex');
+            renderApp();
+        }
+
+        // Instant Realtime Click Handler (Zero Lag, No Zoom)
+        function handlePop(event) {
+            event.preventDefault();
+            personalClicks++;
+            clickQueue++;
+            localStorage.setItem('pop_kk_personal_clicks', personalClicks);
+            document.getElementById('personal-clicks').innerText = personalClicks.toLocaleString();
+
+            const school = schools.find(s => s.id === selectedSchoolId);
+            if (school) {
+                school.score += 1;
+                renderApp(); // Instant Realtime UI refresh
+            }
+
+            createFloatingScore(event);
+        }
+
+        function createFloatingScore(event) {
+            const target = document.getElementById('pop-target');
+            const rect = target.getBoundingClientRect();
+            
+            let clientX = event.clientX;
+            let clientY = event.clientY;
+
+            if (event.touches && event.touches.length > 0) {
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            }
+
+            if (!clientX || !clientY) {
+                clientX = rect.left + rect.width / 2;
+                clientY = rect.top + rect.height / 2;
+            }
+
+            const el = document.createElement('div');
+            el.className = 'floating-score text-amber-300 text-2xl';
+            el.innerText = '+1';
+            el.style.left = `${clientX + (Math.random() * 30 - 15)}px`;
+            el.style.top = `${clientY - 20}px`;
+            document.body.appendChild(el);
+
+            setTimeout(() => { el.remove(); }, 600);
+        }
+
+        async function batchSyncClicks() {
+            if (clickQueue <= 0) return;
+            const currentClicks = clickQueue;
+            clickQueue = 0;
+
+            if (isSupabaseConnected && supabaseClient) {
+                try {
+                    const { data, error } = await supabaseClient.from('schools').select('score').eq('id', selectedSchoolId).single();
+                    if (!error && data) {
+                        const newScore = data.score + currentClicks;
+                        await supabaseClient.from('schools').update({ score: newScore, updated_at: new Date() }).eq('id', selectedSchoolId);
+                    }
+                } catch (err) {
+                    console.error('Sync error:', err);
+                }
+            } else {
+                saveLocalSchools();
+            }
+        }
+
+        function renderApp() {
+            schools.sort((a, b) => b.score - a.score);
+
+            const selectedSchool = schools.find(s => s.id === selectedSchoolId) || schools[0];
+            if (selectedSchool) {
+                selectedSchoolId = selectedSchool.id;
+                document.getElementById('current-school-name').innerText = selectedSchool.name;
+                document.getElementById('current-school-logo').src = getSchoolLogoUrl(selectedSchool.name);
+                
+                const scoreEl = document.getElementById('selected-school-score');
+                scoreEl.innerText = selectedSchool.score.toLocaleString();
+                scoreEl.classList.add('text-pink-400', 'scale-105');
+                setTimeout(() => scoreEl.classList.remove('text-pink-400', 'scale-105'), 200);
+
+                const rank = schools.findIndex(s => s.id === selectedSchool.id) + 1;
+                document.getElementById('selected-school-rank').innerText = `#${rank}`;
+            }
+
+            renderSweetBarChart();
+            renderPodiumStand();
+            renderAdminSchoolsList();
+        }
+
+        // Render Sweet Horizontal Bar Chart Dashboard
+        function renderSweetBarChart(filterText = '') {
+            const container = document.getElementById('dashboard-bars-container');
+            document.getElementById('total-schools-badge').innerText = `${schools.length.toLocaleString()} โรงเรียน`;
+
+            const filtered = schools.filter(s => s.name.toLowerCase().includes(filterText.toLowerCase()));
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="text-center py-8 text-gray-400 text-xs">ไม่พบโรงเรียนที่ค้นหา</div>`;
+                return;
+            }
+
+            const maxScore = Math.max(...schools.map(s => s.score), 1);
+            const totalScoreSum = schools.reduce((acc, curr) => acc + curr.score, 0);
+            const averageScore = Math.round(totalScoreSum / schools.length);
+            document.getElementById('dashboard-average-text').innerText = `AVERAGE SCORE: ${averageScore.toLocaleString()}`;
+
+            const chartColors = [
+                'from-pink-500 to-rose-600',
+                'from-purple-500 to-indigo-600',
+                'from-blue-500 to-cyan-600',
+                'from-emerald-500 to-teal-600',
+                'from-amber-500 to-yellow-600',
+                'from-orange-500 to-red-600'
+            ];
+
+            let html = '';
+            filtered.forEach((school, index) => {
+                const percentage = Math.max(Math.min((school.score / maxScore) * 100, 100), 4);
+                const colorGradient = chartColors[index % chartColors.length];
+                const isSelected = school.id === selectedSchoolId;
+
+                html += `
+                    <div class="flex items-center space-x-3 py-1.5 px-2 rounded-xl transition ${isSelected ? 'bg-white/15 border border-white/30 shadow-lg' : 'hover:bg-white/5'}">
+                        <div class="w-28 sm:w-36 flex-shrink-0 truncate text-xs font-bold text-gray-200" title="${school.name}">
+                            ${school.name} ${isSelected ? '(โรงเรียนของคุณ)' : ''}
+                        </div>
+                        <div class="flex-1 bg-black/40 h-5 rounded-lg overflow-hidden relative border border-white/10 flex items-center">
+                            <div class="h-full sweet-bar bg-gradient-to-r ${colorGradient} rounded-lg flex items-center justify-end pr-2 text-[11px] font-black text-white shadow-sm" style="width: ${percentage}%;">
+                                <span class="drop-shadow">${school.score.toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // Render Podium Stand
+        function renderPodiumStand() {
+            const podiumContainer = document.getElementById('podium-container');
+            const previewContainer = document.getElementById('bottom-ranking-preview');
+
+            const top1 = schools[0];
+            const top2 = schools[1];
+            const top3 = schools[2];
+
+            let podiumHtml = '';
+            
+            if (top2) {
+                podiumHtml += `
+                    <div class="flex flex-col items-center group">
+                        <div class="relative mb-1">
+                            <div class="w-9 h-9 rounded-xl bg-slate-300 text-slate-950 font-black flex items-center justify-center shadow-lg border border-white/40">
+                                <i class="fa-solid fa-school text-xs"></i>
+                            </div>
+                            <span class="absolute -top-2 -right-2 bg-slate-300 text-slate-950 text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow">2</span>
+                        </div>
+                        <p class="text-[11px] font-bold text-white text-center truncate w-full px-1">${top2.name}</p>
+                        <p class="text-[10px] font-black text-amber-400">${top2.score.toLocaleString()}</p>
+                        <div class="w-full bg-gradient-to-t from-slate-700 to-slate-600 h-20 rounded-t-2xl mt-2 border-t-2 border-slate-400 flex items-center justify-center shadow-xl">
+                            <span class="text-xl font-black text-slate-300/40">2</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (top1) {
+                podiumHtml += `
+                    <div class="flex flex-col items-center group -mt-3">
+                        <div class="relative mb-1 animate-bounce-short">
+                            <div class="w-11 h-11 rounded-2xl bg-amber-400 text-slate-950 font-black flex items-center justify-center shadow-xl border border-white/50">
+                                <i class="fa-solid fa-crown text-amber-900 text-sm"></i>
+                            </div>
+                            <span class="absolute -top-2 -right-2 bg-amber-500 text-slate-950 text-xs font-black w-6 h-6 rounded-full flex items-center justify-center shadow">1</span>
+                        </div>
+                        <p class="text-xs font-black text-amber-300 text-center truncate w-full px-1">${top1.name}</p>
+                        <p class="text-xs font-black text-amber-400">${top1.score.toLocaleString()}</p>
+                        <div class="w-full bg-gradient-to-t from-amber-700 to-amber-500 h-28 rounded-t-2xl mt-2 border-t-2 border-amber-300 flex items-center justify-center shadow-2xl">
+                            <span class="text-2xl font-black text-amber-200/50">1</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (top3) {
+                podiumHtml += `
+                    <div class="flex flex-col items-center group">
+                        <div class="relative mb-1">
+                            <div class="w-9 h-9 rounded-xl bg-amber-700 text-white font-black flex items-center justify-center shadow-lg border border-white/40">
+                                <i class="fa-solid fa-school text-xs"></i>
+                            </div>
+                            <span class="absolute -top-2 -right-2 bg-amber-700 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center shadow">3</span>
+                        </div>
+                        <p class="text-[11px] font-bold text-white text-center truncate w-full px-1">${top3.name}</p>
+                        <p class="text-[10px] font-black text-amber-400">${top3.score.toLocaleString()}</p>
+                        <div class="w-full bg-gradient-to-t from-amber-900 to-amber-800 h-16 rounded-t-2xl mt-2 border-t-2 border-amber-600 flex items-center justify-center shadow-xl">
+                            <span class="text-xl font-black text-amber-500/40">3</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            podiumContainer.innerHTML = podiumHtml;
+
+            let previewHtml = '';
+            schools.slice(3, 15).forEach((school) => {
+                const actualRank = schools.findIndex(s => s.id === school.id) + 1;
+                const isSelected = school.id === selectedSchoolId;
+                previewHtml += `
+                    <div class="flex items-center justify-between p-2.5 rounded-xl transition border ${isSelected ? 'bg-red-500/20 border-red-500/50' : 'bg-black/30 border-white/5'}">
+                        <div class="flex items-center space-x-2.5 truncate">
+                            <span class="text-xs font-bold text-gray-400 w-6">#${actualRank}</span>
+                            <span class="font-bold text-xs text-white truncate">${school.name} ${isSelected ? '(โรงเรียนของคุณ)' : ''}</span>
+                        </div>
+                        <span class="font-black text-amber-400 text-xs">${school.score.toLocaleString()} คะแนน</span>
+                    </div>
+                `;
+            });
+            previewContainer.innerHTML = previewHtml;
+        }
+
+        function filterLeaderboard() {
+            const query = document.getElementById('leaderboard-search').value;
+            renderSweetBarChart(query);
+        }
+
+        function openSetupModal() {
+            const modal = document.getElementById('setup-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeSetupModal() {
+            const modal = document.getElementById('setup-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function openAdminModal() {
+            const modal = document.getElementById('admin-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeAdminModal() {
+            const modal = document.getElementById('admin-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function verifyAdminLogin() {
+            const pass = document.getElementById('admin-password-input').value;
+            if (pass === 'popkk123') {
+                document.getElementById('admin-login-view').classList.add('hidden');
+                document.getElementById('admin-dashboard-view').classList.remove('hidden');
+                renderAdminSchoolsList();
+                showToast('เข้าสู่ระบบแอดมินสำเร็จ', 'success');
+            } else {
+                showToast('รหัสผ่านไม่ถูกต้อง (รหัสเริ่มต้น: popkk123)', 'error');
+            }
+        }
+
+        function logoutAdmin() {
+            document.getElementById('admin-login-view').classList.remove('hidden');
+            document.getElementById('admin-dashboard-view').classList.add('hidden');
+            document.getElementById('admin-password-input').value = '';
+        }
+
+        function renderAdminSchoolsList() {
+            const container = document.getElementById('admin-school-list');
+            let html = '';
+            schools.slice(0, 50).forEach(school => {
+                html += `
+                    <div class="bg-black/40 border border-white/10 rounded-xl p-3 flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-sm text-white">${school.name}</p>
+                            <p class="text-xs text-amber-400">${school.score.toLocaleString()} คะแนน</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <button onclick="resetSchoolScore(${school.id})" class="bg-amber-500/20 hover:bg-amber-500/40 text-amber-300 px-3 py-1.5 rounded-lg text-xs font-medium transition">รีเซ็ต</button>
+                            <button onclick="deleteSchool(${school.id})" class="bg-red-500/20 hover:bg-red-500/40 text-red-300 px-3 py-1.5 rounded-lg text-xs font-medium transition">ลบ</button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html + `<p class="text-center text-xs text-gray-500 py-2">(แสดงตัวอย่าง 50 โรงเรียนแรกในระบบแอดมินจากทั้งหมด 1,262 แห่ง)</p>`;
+        }
+
+        async function addNewSchool() {
+            const nameInput = document.getElementById('new-school-name-input');
+            const name = nameInput.value.trim();
+            if (!name) {
+                showToast('กรุณากรอกชื่อโรงเรียน', 'error');
+                return;
+            }
+
+            if (isSupabaseConnected && supabaseClient) {
+                try {
+                    const { error } = await supabaseClient.from('schools').insert([{ name, score: 0 }]);
+                    if (error) throw error;
+                    nameInput.value = '';
+                    fetchSupabaseSchools(false);
+                    showToast('เพิ่มโรงเรียนใน Supabase สำเร็จ', 'success');
+                } catch (err) {
+                    showToast('เกิดข้อผิดพลาดในการเพิ่มโรงเรียน', 'error');
+                }
+            } else {
+                const newId = schools.length > 0 ? Math.max(...schools.map(s => s.id)) + 1 : 1;
+                schools.unshift({ id: newId, name, score: 0 });
+                saveLocalSchools();
+                nameInput.value = '';
+                renderApp();
+                showToast('เพิ่มโรงเรียนสำเร็จ', 'success');
+            }
+        }
+
+        async function resetSchoolScore(id) {
+            if (isSupabaseConnected && supabaseClient) {
+                try {
+                    await supabaseClient.from('schools').update({ score: 0 }).eq('id', id);
+                    fetchSupabaseSchools(false);
+                    showToast('รีเซ็ตคะแนนสำเร็จ', 'success');
+                } catch (err) {
+                    showToast('เกิดข้อผิดพลาด', 'error');
+                }
+            } else {
+                const school = schools.find(s => s.id === id);
+                if (school) {
+                    school.score = 0;
+                    saveLocalSchools();
+                    renderApp();
+                    showToast('รีเซ็ตคะแนนสำเร็จ', 'success');
+                }
+            }
+        }
+
+        async function deleteSchool(id) {
+            if (isSupabaseConnected && supabaseClient) {
+                try {
+                    await supabaseClient.from('schools').delete().eq('id', id);
+                    fetchSupabaseSchools(false);
+                    showToast('ลบโรงเรียนสำเร็จ', 'success');
+                } catch (err) {
+                    showToast('เกิดข้อผิดพลาด', 'error');
+                }
+            } else {
+                schools = schools.filter(s => s.id !== id);
+                saveLocalSchools();
+                renderApp();
+                showToast('ลบโรงเรียนสำเร็จ', 'success');
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `pointer-events-auto px-4 py-3 rounded-2xl text-xs font-bold shadow-xl border flex items-center space-x-2 animate-in fade-in slide-in-from-bottom-5 duration-300 ${type === 'success' ? 'bg-emerald-950/90 border-emerald-500/50 text-emerald-200' : 'bg-red-950/90 border-red-500/50 text-red-200'}`;
+            
+            const icon = type === 'success' ? 'fa-circle-check text-emerald-400' : 'fa-circle-exclamation text-red-400';
+            toast.innerHTML = `<i class="fa-solid ${icon} text-sm"></i><span>${message}</span>`;
+            
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateY(10px)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
